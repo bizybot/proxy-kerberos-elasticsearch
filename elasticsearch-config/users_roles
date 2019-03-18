@@ -1,0 +1,3 @@
+superuser:yg
+write_blog_role: buser1, buser2
+read_blog_role: buser1, buser2

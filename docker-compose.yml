@@ -1,0 +1,72 @@
+version: '3'
+services:
+  proxy: 
+    image: nginx:latest
+    container_name: proxy
+    networks:
+      - dev.local
+    env_file:
+      - ./nginx.env
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./error.log:/etc/nginx/error_log.log
+    ports:
+      - "9200:9200"
+    depends_on:
+      - kdc-kadmin
+
+  kdc-kadmin:
+    build: ./kdc-kadmin
+    image: kdc:latest
+    container_name: kdc
+    networks:
+      - dev.local
+    env_file: kerberos.env
+    volumes:
+      # This is needed otherwise there won't be enough entropy to generate a new kerberos realm
+      - /dev/urandom:/dev/random
+      - ./elasticsearch-config/keytabs:/etc/keytabs
+    ports:
+      - "749:749"
+      - "88:88" 
+
+  client:
+    build: ./kerberos-client
+    image: kerb-client:latest
+    container_name: client
+    networks:
+      - dev.local
+    env_file: kerberos.env 
+    depends_on:
+      - kdc-kadmin
+
+  es:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.6.2
+    container_name: es
+    networks:
+      - dev.local
+    env_file:
+      - ./elasticsearch-config/es.env
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata1:/usr/share/elasticsearch/data
+      - ./elasticsearch-config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+      - ./elasticsearch-config/krb5.conf:/etc/krb5.conf
+      - ./elasticsearch-config/keytabs/esproxy.keytab:/usr/share/elasticsearch/config/esproxy.keytab
+      - ./elasticsearch-config/users:/usr/share/elasticsearch/config/users
+      - ./elasticsearch-config/users_roles:/usr/share/elasticsearch/config/users_roles
+    expose:
+      - "9200"
+    depends_on:
+      - kdc-kadmin
+
+networks:
+  dev.local:
+    driver: bridge
+
+volumes:
+  esdata1:
+    driver: local
